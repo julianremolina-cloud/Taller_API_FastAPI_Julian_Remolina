@@ -1,225 +1,302 @@
-# Sistema de Gestión de Biblioteca - API REST
+# Taller 2 – API REST Segura con FastAPI: Autenticación, Autorización y Migraciones – Biblioteca
 
-API REST completa construida desde cero con **Python**, **FastAPI**, **SQLAlchemy** y **PostgreSQL**, aplicando el patrón arquitectónico **MVC (Modelo - Vista / Esquema - Controlador)**, validaciones estrictas con **Pydantic**, relaciones complejas de base de datos (1:N y N:M), consultas optimizadas con joins y agregaciones, y reglas de negocio del sistema de préstamos.
+API REST completa de nivel de producción construida con **FastAPI**, **SQLAlchemy 2.0**, **Alembic**, **PostgreSQL**, **Argon2** y **JWT**. Implementa configuración centralizada por entorno con Pydantic-Settings, migraciones versionadas de base de datos, autenticación con flujo OAuth2 Password (Access Token y Refresh Token con rotación y detección de robo), autorización basada en roles (RBAC) y control de propiedad de recursos, paginación estandarizada, auditoría por request ID, rate limiting con SlowAPI y manejo controlado de excepciones.
 
 ---
 
 ## 👥 Integrantes
-- **Aprendiz:** Camilo Aguirre
+- **Aprendiz:** Julian Remolina
 - **Programa:** Análisis y Desarrollo de Software (ADSO) - SENA
-- **Repositorio:** `Taller_API_FastAPI_camilo_aguirre`
+- **Repositorio:** `Taller2_API_FastAPI_Segura_Julian_Remolina`
 
 ---
 
-## 🏛️ Arquitectura del Proyecto (Patrón MVC)
-
-El proyecto sigue una estricta separación de responsabilidades:
+## 🏛️ Estructura del Proyecto
 
 ```
 biblioteca/
 ├── app/
-│   ├── main.py              # Creación de la aplicación FastAPI, registro de routers y manejador global de excepciones
+│   ├── main.py              # Aplicación FastAPI, routers v1, middlewares (CORS, Request ID, logs), rate limit y manejadores de error
 │   ├── core/
-│   │   ├── database.py      # Conexión a PostgreSQL (engine, SessionLocal, Base)
-│   │   ├── dependencies.py  # Inyección de dependencias (get_db / SessionDep, paginación reutilizable)
-│   │   └── exceptions.py    # Jerarquía de excepciones propias (ErrorAplicacion, NoEncontrado, Conflicto, ReglaNegocio)
-│   ├── models/              # Modelos ORM SQLAlchemy (definen tablas y relaciones)
+│   │   ├── config.py        # Configuración tipada leída desde .env con pydantic-settings
+│   │   ├── database.py      # Engine, SessionLocal, Base con naming convention
+│   │   ├── dependencies.py  # Inyección de dependencias (SessionDep, CurrentUser, requiere_rol, PaginacionDep)
+│   │   ├── exceptions.py    # Excepciones propias (NoAutenticado, Prohibido, CuentaBloqueada, NoEncontrado, Conflicto, ReglaNegocio)
+│   │   ├── limiter.py       # Instancia de SlowAPI Limiter para rate limiting
+│   │   └── security.py      # Hashing Argon2 y creación/verificación de JWT con PyJWT
+│   ├── models/              # Modelos ORM SQLAlchemy 2.0
 │   │   ├── autor.py
 │   │   ├── categoria.py
-│   │   ├── libro.py         # Modelo Libro y tabla asociativa libro_categoria
+│   │   ├── libro.py         # Modelo Libro y tabla intermedia libro_categoria
+│   │   ├── prestamo.py      # Modelo Prestamo (+ multa_pagada, registrado_por_id)
 │   │   ├── socio.py
-│   │   └── prestamo.py
-│   ├── schemas/             # Esquemas Pydantic (validación de entrada y serialización de salida)
+│   │   ├── usuario.py       # Modelo Usuario (+ rol Enum rolusuario)
+│   │   └── refresh_token.py # Modelo RefreshToken con jti
+│   ├── schemas/             # Esquemas de validación y serialización Pydantic
+│   │   ├── auth.py          # TokenRespuesta, RefreshTokenSolicitud, PasswordCambiar
 │   │   ├── autor.py
 │   │   ├── categoria.py
 │   │   ├── libro.py
-│   │   ├── socio.py
+│   │   ├── pagina.py        # Esquema genérico Pagina[T] con items, total, skip, limit
 │   │   ├── prestamo.py
-│   │   └── reportes.py
-│   ├── controllers/         # Lógica de negocio, consultas SQL y lanzamiento de excepciones propias
+│   │   ├── reportes.py
+│   │   ├── socio.py
+│   │   └── usuario.py       # UsuarioRegistro, UsuarioCrear, UsuarioRespuesta, SocioActualizarPropio
+│   ├── controllers/         # Lógica de negocio y consultas a la base de datos
+│   │   ├── auth.py
 │   │   ├── autor.py
 │   │   ├── categoria.py
 │   │   ├── libro.py
-│   │   ├── socio.py
 │   │   ├── prestamo.py
-│   │   └── reportes.py
-│   └── routes/              # Endpoints HTTP (validación y llamado a controladores)
-│       ├── autor.py
-│       ├── categoria.py
-│       ├── libro.py
-│       ├── socio.py
-│       ├── prestamo.py
-│       └── reportes.py
+│   │   ├── reportes.py
+│   │   ├── socio.py
+│   │   └── usuario.py
+│   ├── routes/              # Routers HTTP bajo el prefijo /api/v1
+│   │   ├── auth.py
+│   │   ├── autor.py
+│   │   ├── categoria.py
+│   │   ├── health.py        # Endpoint /api/v1/health
+│   │   ├── libro.py
+│   │   ├── prestamo.py
+│   │   ├── reportes.py
+│   │   ├── socio.py
+│   │   └── usuario.py
+│   └── scripts/
+│       └── crear_admin.py   # Creación del primer administrador por consola interactiva
+├── alembic/
+│   ├── env.py               # Conexión leída desde pydantic-settings y metadatos
+│   └── versions/            # Migraciones versionadas
+│       ├── 0001_estado_inicial.py
+│       ├── 0002_multa_pagada.py
+│       ├── 0003_usuarios.py
+│       ├── 0004_refresh_tokens.py
+│       └── 0005_auditoria_prestamos.py
 ├── tests/
-│   └── test_taller.py       # Suite de pruebas automatizadas con pytest (24 casos de prueba)
-├── seed.py                  # Script para poblar la base de datos con los datos oficiales de prueba
+│   ├── conftest.py          # Fixtures de pytest, base de datos de test y cliente TestClient
+│   ├── test_taller.py       # Flujo completo con los 33 casos de prueba del taller
+│   └── test_mas_cobertura.py# Pruebas adicionales para cobertura de código superior al 70%
 ├── .env.example             # Plantilla de variables de entorno
-├── .env                     # Variables de entorno locales (ignorado en git)
-├── .gitignore               # Exclusión de archivos sensibles y temporales
-├── requirements.txt         # Dependencias del proyecto
+├── alembic.ini              # Archivo de configuración de Alembic
+├── Dockerfile               # Definición de contenedor para despliegue
+├── docker-compose.yml       # Orquestación de PostgreSQL y API
+├── requirements.txt         # Dependencias de producción
+├── requirements-dev.txt     # Dependencias de desarrollo y pruebas
+├── seed.py                  # Script para cargar datos de prueba iniciales
 └── README.md                # Documentación del proyecto
 ```
 
-### Separación de Responsabilidades:
-- **`models`**: Define únicamente las tablas y sus relaciones. No valida datos de entrada.
-- **`schemas`**: Valida lo que entra y define la forma de lo que sale con Pydantic. No consulta la base de datos.
-- **`controllers`**: Ejecuta las consultas, aplica las reglas de negocio y lanza excepciones propias. **No utiliza HTTPException ni códigos HTTP**.
-- **`routes`**: Recibe la petición, delega la ejecución al controlador y define el `response_model` y códigos de estado HTTP. **No escribe consultas SQL**.
+---
+
+## 📦 Librerías y Tecnologías Utilizadas
+
+| Librería | Versión | Uso |
+|---|---|---|
+| `fastapi[standard]` | `>=0.115` | Framework web, servidor Uvicorn, CLI FastAPI, formulación multipart |
+| `sqlalchemy` | `>=2.0` | ORM con sintaxis 2.0 (`select`, `Mapped`, convenciones de metadatos) |
+| `psycopg[binary]` | `>=3.2` | Driver PostgreSQL para Python |
+| `alembic` | `>=1.13` | Control de versiones y migraciones de esquemas en base de datos |
+| `pydantic-settings` | `>=2.4` | Lectura tipada de configuración y variables de entorno (`.env`) |
+| `pyjwt` | `>=2.9` | Emisión y validación segura de JSON Web Tokens (HS256) |
+| `pwdlib[argon2]` | `>=0.2` | Hashing moderno y seguro de contraseñas con Argon2 |
+| `slowapi` | `>=0.1.9` | Rate limiting por dirección IP |
+| `pytest` y `pytest-cov`| `>=8.0` | Pruebas automatizadas y análisis de cobertura |
 
 ---
 
-## ⚙️ Requisitos e Instalación
+## ⚙️ Variables de Entorno (`.env`)
 
-### 1. Prerrequisitos
-- Python 3.10 o superior (probado en Python 3.13)
-- PostgreSQL 14 o superior en ejecución
-- Base de datos vacía creada en PostgreSQL (por ejemplo, `biblioteca`)
+Cree un archivo `.env` en la raíz del proyecto tomando como base `.env.example`:
 
-### 2. Clonación o Preparación del Proyecto
-```bash
-cd "fast api biblioteca"
+```env
+# Conexión a la base de datos principal
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/biblioteca
+
+# Base de datos exclusiva para pruebas unitarias con pytest
+TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/biblioteca_test
+
+# Seguridad y Firma de JWT (mínimo 32 caracteres generados con secrets)
+SECRET_KEY=su_clave_secreta_de_al_menos_32_caracteres_aleatorios
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# Frontends autorizados en CORS (formato JSON)
+CORS_ORIGINS=["http://localhost:5173"]
+
+# Entorno de ejecución: dev | test | prod
+ENVIRONMENT=dev
 ```
 
-### 3. Crear y Activar el Entorno Virtual
-En Windows (PowerShell):
-```powershell
+Para generar una clave secreta segura de 32 bytes:
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+---
+
+## 🚀 Instalación y Puesta en Marcha
+
+### 1. Clonar el Repositorio y Crear Entorno Virtual
+```bash
+git clone <URL_DEL_REPOSITORIO>
+cd Taller2_API_FastAPI_Segura_Julian_Remolina
+
+# Crear entorno virtual
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
 
-En Linux / macOS:
-```bash
-python3 -m venv .venv
+# Activar entorno virtual
+# En Windows (PowerShell):
+.\.venv\Scripts\Activate.ps1
+# En Linux/macOS:
 source .venv/bin/activate
 ```
 
-### 4. Instalar Dependencias
+### 2. Instalar Dependencias
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
+
+### 3. Levantar la Base de Datos PostgreSQL
+Con Docker Compose:
+```bash
+docker compose up -d db
+```
+
+O utilizando una instancia local de PostgreSQL asegurando tener creadas las bases de datos `biblioteca` y `biblioteca_test`.
+
+### 4. Aplicar Migraciones con Alembic
+```bash
+alembic upgrade head
+```
+
+Para verificar o revertir migraciones:
+```bash
+# Revertir la última migración
+alembic downgrade -1
+
+# Revertir todas las migraciones
+alembic downgrade base
+
+# Volver al estado más reciente
+alembic upgrade head
+
+# Ver la versión actual de la base de datos
+alembic current
+```
+
+### 5. Crear el Primer Administrador
+La creación de administradores está protegida y no se permite por la API pública:
+```bash
+python -m app.scripts.crear_admin
+```
+Ingrese por consola el correo electrónico, nombre y contraseña del administrador.
+
+### 6. Ejecutar la API en Modo Desarrollo
+```bash
+fastapi dev app/main.py
+# o con uvicorn:
+uvicorn app.main:app --reload --port 8000
+```
+La documentación interactiva estará disponible en:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
 
 ---
 
-## 🔐 Configuración de Variables de Entorno
+## 🛡️ Roles del Sistema y Matriz de Permisos
 
-Crear el archivo `.env` a partir de `.env.example`:
+El sistema implementa tres roles definidos mediante el enum `rolusuario`:
 
-```bash
-cp .env.example .env
-```
+1. **Anónimo:** Usuarios no autenticados (sin token Bearer).
+2. **Socio:** Usuario vinculado a un registro de la tabla `socios`.
+3. **Bibliotecario:** Empleado responsable de gestionar catálogo, préstamos y devoluciones.
+4. **Admin:** Administrador total del sistema.
 
-Configurar la URL de conexión en `.env`:
-```env
-DATABASE_URL=postgresql+psycopg://usuario:contrasena@localhost:5432/biblioteca
-```
+### Matriz de Permisos
 
-> **Ejemplo local:**
-> `DATABASE_URL=postgresql+psycopg://postgres:1234@localhost:5432/biblioteca`
-
----
-
-## 🚀 Ejecución de la API
-
-Para iniciar el servidor en modo desarrollo con recarga automática:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-La API quedará disponible en:
-- **API Base:** [http://127.0.0.1:8000](http://127.0.0.1:8000)
-- **Documentación Interactiva (Swagger UI):** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **Documentación Alternativa (ReDoc):** [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
-
----
-
-## 🧪 Poblado de Datos y Pruebas
-
-### Poblar Base de Datos con Datos de Prueba
-Para cargar automáticamente los autores, categorías, libros y socios especificados en el taller:
-```bash
-python seed.py
-```
-
-### Ejecutar las Pruebas Automatizadas (24 Casos del Taller)
-Para ejecutar la suite completa de pruebas con `pytest`:
-```bash
-pytest -v -s tests/test_taller.py
-```
+| Endpoint | Método | Anónimo | Socio | Bibliotecario | Admin |
+|---|---|:---:|:---:|:---:|:---:|
+| `/api/v1/health` | GET | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/auth/registro` | POST | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/auth/login` | POST | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/auth/refresh` | POST | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/auth/logout` | POST | ❌ | ✅ | ✅ | ✅ |
+| `/api/v1/auth/me` | GET | ❌ | ✅ | ✅ | ✅ |
+| `/api/v1/auth/me/password` | PATCH | ❌ | ✅ | ✅ | ✅ |
+| `/api/v1/libros`, `/autores`, `/categorias` | GET | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/libros`, `/autores`, `/categorias` | POST / PATCH | ❌ | ❌ | ✅ | ✅ |
+| `/api/v1/libros/{id}`, `/autores/{id}`, `/categorias/{id}` | DELETE | ❌ | ❌ | ❌ | ✅ |
+| `/api/v1/socios/me` | GET / PATCH | ❌ | ✅ (Propio) | ❌ | ❌ |
+| `/api/v1/socios/me/prestamos` | GET | ❌ | ✅ (Propio) | ❌ | ❌ |
+| `/api/v1/socios/me/multas` | GET | ❌ | ✅ (Propio) | ❌ | ❌ |
+| `/api/v1/socios` | GET, POST | ❌ | ❌ | ✅ | ✅ |
+| `/api/v1/socios/{id}` | GET, PATCH | ❌ | ❌ | ✅ | ✅ |
+| `/api/v1/socios/{id}` | DELETE | ❌ | ❌ | ❌ | ✅ |
+| `/api/v1/prestamos` | GET | ❌ | ✅ (Filtrado) | ✅ | ✅ |
+| `/api/v1/prestamos/{id}` | GET | ❌ | ✅ (Propio o 404) | ✅ | ✅ |
+| `/api/v1/prestamos` | POST | ❌ | ❌ | ✅ | ✅ |
+| `/api/v1/prestamos/{id}/devolucion` | POST | ❌ | ❌ | ✅ | ✅ |
+| `/api/v1/prestamos/{id}/pago-multa` | POST | ❌ | ❌ | ✅ | ✅ |
+| `/api/v1/reportes/*` | GET | ❌ | ❌ | ✅ | ✅ |
+| `/api/v1/usuarios` (todos) | GET, POST, PATCH | ❌ | ❌ | ❌ | ✅ |
 
 ---
 
-## 📋 Tabla de Endpoints
+## 📜 Reglas Implementadas
 
-### 1. Autores (`/autores`)
-| Método | Ruta | Parámetros | Descripción | Códigos HTTP |
-|---|---|---|---|---|
-| `GET` | `/autores` | `skip` (int), `limit` (int), `nacionalidad` (str, opcional) | Lista paginada con filtro opcional | `200` |
-| `GET` | `/autores/{id}` | `id` (int) | Consulta un autor | `200`, `404` |
-| `GET` | `/autores/{id}/libros` | `id` (int) | Lista los libros del autor | `200`, `404` |
-| `POST` | `/autores` | Body JSON (`AutorCreate`) | Crea un autor | `201`, `409`, `422` |
-| `PATCH` | `/autores/{id}` | `id` (int), Body JSON (`AutorUpdate`) | Actualiza campos del autor | `200`, `404`, `409`, `422` |
-| `DELETE` | `/autores/{id}` | `id` (int) | Elimina un autor (409 si tiene libros) | `204`, `404`, `409` |
+### Reglas de Negocio (R1 a R11)
+- **R1:** El socio existe al pedir préstamo (HTTP 404).
+- **R2:** El libro existe al pedir préstamo (HTTP 404).
+- **R3:** El socio debe estar activo (HTTP 422).
+- **R4:** El socio no puede tener préstamos vencidos (HTTP 422).
+- **R5:** El socio no puede tener más de 3 préstamos activos sin devolver (HTTP 422).
+- **R6:** El socio no puede tener en préstamo dos veces el mismo libro simultáneamente (HTTP 409).
+- **R7:** El libro debe tener ejemplares disponibles (HTTP 422).
+- **R8:** La fecha límite se calcula como `fecha_prestamo + dias`.
+- **R9:** La devolución valida existencia, que no haya sido devuelto previamente y que la fecha de devolución no sea anterior a la de préstamo.
+- **R10:** Si hay días de retraso, se liquida multa a $0.50 por día de mora.
+- **R11:** Un socio con multas pendientes no pagadas no puede solicitar nuevos préstamos (HTTP 422 "El socio tiene multas pendientes").
 
-### 2. Categorías (`/categorias`)
-| Método | Ruta | Parámetros | Descripción | Códigos HTTP |
-|---|---|---|---|---|
-| `GET` | `/categorias` | `skip` (int), `limit` (int) | Lista paginada de categorías | `200` |
-| `GET` | `/categorias/{id}` | `id` (int) | Consulta una categoría | `200`, `404` |
-| `POST` | `/categorias` | Body JSON (`CategoriaCreate`) | Crea una categoría (nombre en minúsculas) | `201`, `409`, `422` |
-| `PATCH` | `/categorias/{id}` | `id` (int), Body JSON (`CategoriaUpdate`) | Actualiza una categoría | `200`, `404`, `409`, `422` |
-| `DELETE` | `/categorias/{id}` | `id` (int) | Elimina categoría y desvincula de libros | `204`, `404` |
+### Reglas de Autenticación (A1 a A7)
+- **A1:** Validación de email y contraseña. El mensaje es idéntico si el email no existe o la clave es incorrecta (`401 "Credenciales inválidas"`).
+- **A2:** Validación de usuario activo (`403 "Usuario inactivo"`).
+- **A3:** Tras 5 intentos fallidos consecutivos, la cuenta se bloquea por 15 minutos (`423 "Cuenta bloqueada temporalmente"`).
+- **A4:** El access token debe existir, tener firma válida y no estar vencido.
+- **A5:** Un refresh token no puede ser utilizado como access token ni viceversa (`claim type`).
+- **A6:** Rotación de refresh tokens: al usarse, se revoca el token y se emite uno nuevo. Si se reutiliza un token revocado, se revocan todos los refresh tokens del usuario por seguridad contra robo.
+- **A7:** `get_current_user` consulta al usuario en base de datos en cada petición; si fue desactivado, su token vigente queda rechazado de inmediato.
 
-### 3. Libros (`/libros`)
-| Método | Ruta | Parámetros | Descripción | Códigos HTTP |
-|---|---|---|---|---|
-| `GET` | `/libros` | `skip`, `limit`, `buscar`, `autor`, `categoria_id`, `desde`, `hasta`, `orden` | Lista paginada con filtros combinables | `200` |
-| `GET` | `/libros/{id}` | `id` (int) | Consulta libro con autor, categorías y `disponibles` | `200`, `404` |
-| `POST` | `/libros` | Body JSON (`LibroCreate`) | Crea libro (404 si autor/cat no existen, 409 si ISBN existe) | `201`, `404`, `409`, `422` |
-| `PATCH` | `/libros/{id}` | `id` (int), Body JSON (`LibroUpdate`) | Actualiza libro (422 si ejemplares < préstamos activos) | `200`, `404`, `409`, `422` |
-| `DELETE` | `/libros/{id}` | `id` (int) | Elimina libro (409 si tiene préstamos sin devolver) | `204`, `404`, `409` |
-
-### 4. Socios (`/socios`)
-| Método | Ruta | Parámetros | Descripción | Códigos HTTP |
-|---|---|---|---|---|
-| `GET` | `/socios` | `skip` (int), `limit` (int), `activo` (bool, opcional) | Lista paginada con filtro por activo | `200` |
-| `GET` | `/socios/{id}` | `id` (int) | Consulta un socio | `200`, `404` |
-| `GET` | `/socios/{id}/prestamos` | `id` (int), `estado` (activo/vencido/devuelto) | Historial de préstamos del socio | `200`, `404` |
-| `POST` | `/socios` | Body JSON (`SocioCreate`) | Crea un socio (email único) | `201`, `409`, `422` |
-| `PATCH` | `/socios/{id}` | `id` (int), Body JSON (`SocioUpdate`) | Actualiza un socio | `200`, `404`, `409`, `422` |
-| `DELETE` | `/socios/{id}` | `id` (int) | 409 si préstamos activos; inactiva si devueltos; borra si ninguno | `204`, `404`, `409` |
-
-### 5. Préstamos (`/prestamos`)
-| Método | Ruta | Parámetros | Descripción | Códigos HTTP |
-|---|---|---|---|---|
-| `GET` | `/prestamos` | `skip`, `limit`, `estado`, `socio_id`, `libro_id` | Lista préstamos con filtros | `200` |
-| `GET` | `/prestamos/{id}` | `id` (int) | Consulta préstamo con libro y socio anidados | `200`, `404` |
-| `POST` | `/prestamos` | Body JSON (`PrestamoCreate`) | Registra un préstamo aplicando reglas R1 a R8 | `201`, `404`, `409`, `422` |
-| `POST` | `/prestamos/{id}/devolucion` | `id` (int), Body JSON (`DevolucionCreate`) | Registra devolución aplicando reglas R9 y R10 | `200`, `404`, `409`, `422` |
-
-### 6. Reportes Administrativos (`/reportes`)
-| Método | Ruta | Parámetros | Descripción | Técnica SQL |
-|---|---|---|---|---|
-| `GET` | `/reportes/libros-mas-prestados` | `limite` (int, default 5) | Top libros más prestados ordenados descendentemente | `join + group_by + count + order_by` |
-| `GET` | `/reportes/categorias` | Ninguno | Total de libros por categoría (incluyendo 0) | `outerjoin + group_by` |
-| `GET` | `/reportes/prestamos-vencidos` | Ninguno | Préstamos vencidos con cálculo de días de retraso | `join (3 tablas) + where` |
-| `GET` | `/reportes/socios-con-multas` | Ninguno | Socios con multas acumuladas | `group_by + sum + having` |
-| `GET` | `/reportes/autores` | Ninguno | Libros, ejemplares y préstamos por cada autor | `outerjoin + CTE / subconsultas` |
-| `GET` | `/reportes/resumen` | Ninguno | Totales globales del sistema | `select(func.count()) y func.sum` |
+### Reglas de Autorización (Z1 a Z7)
+- **Z1:** Verificación estricta de roles según la matriz (HTTP 403).
+- **Z2:** Un socio que intenta consultar un préstamo ajeno recibe HTTP 404 (evita revelar la existencia de recursos ajenos).
+- **Z3:** En `GET /prestamos`, el socio solo recibe sus préstamos incluso si especifica `?socio_id=` de otro socio.
+- **Z4:** El socio no puede alterar su email, rol o estado activo mediante `PATCH /socios/me` (`extra="forbid"`, HTTP 422).
+- **Z5:** Debe existir al menos un administrador activo; un admin no puede quitarse su rol ni desactivarse a sí mismo (HTTP 422).
+- **Z6:** Cambiar el rol o desactivar a un usuario revoca de forma automática todos sus refresh tokens.
+- **Z7:** Cada préstamo almacena en `registrado_por_id` el ID del usuario que realizó la operación (Auditoría).
 
 ---
 
-## ⚖️ Reglas de Negocio Implementadas
+## 🧪 Pruebas Automatizadas y Cobertura
 
-El sistema valida las reglas de negocio estrictamente en el controlador:
+Para ejecutar todas las pruebas automatizadas y generar el reporte de cobertura:
 
-- **R1:** El socio debe existir (HTTP 404).
-- **R2:** El libro debe existir (HTTP 404).
-- **R3:** El socio debe estar activo (`activo == True`) (HTTP 422: *"El socio no está activo"*).
-- **R4:** El socio no debe tener préstamos vencidos (HTTP 422: *"El socio tiene préstamos vencidos"*).
-- **R5:** El socio debe tener menos de 3 préstamos sin devolver (HTTP 422: *"Máximo de 3 préstamos"*).
-- **R6:** El socio no puede tener ya ese mismo libro sin devolver (HTTP 409: *"El socio ya tiene este libro en préstamo"*).
-- **R7:** El libro debe tener ejemplares disponibles (`ejemplares - prestamos_activos > 0`) (HTTP 422: *"No hay ejemplares disponibles"*).
-- **R8:** La fecha límite se calcula como `fecha_prestamo + dias` (por defecto 14 días).
-- **R9:** Al devolver: el préstamo debe existir (404), no haber sido devuelto antes (409) y la fecha de devolución no puede ser anterior a la del préstamo (422).
-- **R10:** Si se devuelve tarde (`fecha_devolucion > fecha_limite`), se cobra una multa de `$0.50` por cada día de retraso.
+```bash
+pytest --cov=app --cov-report=term-missing
+```
+
+### Resultados de Cobertura
+- **Cobertura total obtenida:** **80%** (Superando el requisito mínimo del 70%).
+- **Casos probados:** Los 33 casos de prueba del taller implementados y verificados.
+
+---
+
+## 🐳 Despliegue con Docker
+
+Para levantar la arquitectura completa (Base de datos PostgreSQL + API con migraciones automáticas):
+
+```bash
+docker compose up --build
+```
+
+El servicio estará disponible en `http://localhost:8000`.

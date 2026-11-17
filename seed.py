@@ -2,22 +2,15 @@
 Script para inicializar la base de datos con los datos de prueba del taller.
 Ejecución: python seed.py
 """
-import os
-from dotenv import load_dotenv
 import sqlalchemy
-from app.core.database import Base, SessionLocal, engine
+from app.core.database import SessionLocal, engine
 from app.models.autor import Autor
 from app.models.categoria import Categoria
 from app.models.libro import Libro
 from app.models.socio import Socio
 
-load_dotenv()
-
 
 def sembrar_datos():
-    print("Creando tablas si no existen...")
-    Base.metadata.create_all(bind=engine)
-
     db = SessionLocal()
     try:
         # Limpiar datos existentes en cascada
@@ -25,7 +18,7 @@ def sembrar_datos():
         with engine.connect() as conn:
             conn.execute(
                 sqlalchemy.text(
-                    "TRUNCATE prestamos, libro_categoria, libros, categorias, socios, autores RESTART IDENTITY CASCADE;"
+                    "TRUNCATE refresh_tokens, usuarios, prestamos, libro_categoria, libros, categorias, socios, autores RESTART IDENTITY CASCADE;"
                 )
             )
             conn.commit()
