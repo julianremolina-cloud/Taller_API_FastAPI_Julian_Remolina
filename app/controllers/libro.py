@@ -6,7 +6,8 @@ from ..models.autor import Autor
 from ..models.categoria import Categoria
 from ..models.libro import Libro
 from ..models.prestamo import Prestamo
-from ..schemas.libro import LibroCreate, LibroUpdate, OrdenLibrosEnum
+from ..schemas.libro import LibroCreate, LibroResponse, LibroUpdate, OrdenLibrosEnum
+from ..schemas.pagina import Pagina
 
 
 def _calcular_disponibles_varios(db: Session, libros: list[Libro]) -> None:
@@ -77,9 +78,18 @@ def listar_libros(
     else:
         consulta = consulta.order_by(Libro.id.asc())
 
+    # Total
+    subq = consulta.subquery()
+    total = db.scalar(select(func.count()).select_from(subq)) or 0
+
     libros = list(db.scalars(consulta.offset(skip).limit(limit)).all())
     _calcular_disponibles_varios(db, libros)
-    return libros
+    return Pagina[LibroResponse](
+        items=[LibroResponse.model_validate(l) for l in libros],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
 def obtener_libro_por_id(db: Session, libro_id: int) -> Libro:

@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Query
-from ..core.dependencies import SessionDep
+
 from ..controllers import reportes as reportes_controller
+from ..core.dependencies import SessionDep, requiere_rol
+from ..models.usuario import RolUsuario
 from ..schemas.reportes import (
     AutorReporte,
     CategoriaReporte,
@@ -10,7 +12,15 @@ from ..schemas.reportes import (
     SocioConMultasReporte,
 )
 
-router = APIRouter(prefix="/reportes", tags=["Reportes"])
+router = APIRouter(
+    prefix="/reportes",
+    tags=["Reportes"],
+    dependencies=[requiere_rol(RolUsuario.admin, RolUsuario.bibliotecario)],
+    responses={
+        401: {"description": "No autenticado"},
+        403: {"description": "Permisos insuficientes (solo staff)"},
+    },
+)
 
 
 @router.get("/libros-mas-prestados", response_model=list[LibroMasPrestadoReporte])
@@ -48,5 +58,5 @@ def obtener_reporte_autores(db: SessionDep):
 
 @router.get("/resumen", response_model=ResumenReporte)
 def obtener_reporte_resumen(db: SessionDep):
-    """Retorna totales globales del sistema de biblioteca."""
+    """Retorna métricas globales consolidadas del sistema de biblioteca."""
     return reportes_controller.reporte_resumen(db=db)

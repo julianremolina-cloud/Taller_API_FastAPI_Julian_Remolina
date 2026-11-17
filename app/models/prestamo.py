@@ -1,5 +1,5 @@
 from datetime import date
-from sqlalchemy import Column, Date, ForeignKey, Integer, Numeric
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, Numeric
 from sqlalchemy.orm import relationship
 from ..core.database import Base
 
@@ -14,9 +14,12 @@ class Prestamo(Base):
     fecha_limite = Column(Date, nullable=False)
     fecha_devolucion = Column(Date, nullable=True)
     multa = Column(Numeric(10, 2), default=0.0, nullable=False)
+    multa_pagada = Column(Boolean, default=False, nullable=False)
+    registrado_por_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
 
     libro = relationship("Libro", back_populates="prestamos")
     socio = relationship("Socio", back_populates="prestamos")
+    registrado_por = relationship("Usuario", foreign_keys=[registrado_por_id])
 
     @property
     def estado(self) -> str:

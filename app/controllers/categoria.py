@@ -1,14 +1,23 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+
 from ..core.exceptions import Conflicto, NoEncontrado
 from ..models.categoria import Categoria
-from ..schemas.categoria import CategoriaCreate, CategoriaUpdate
+from ..schemas.categoria import CategoriaCreate, CategoriaResponse, CategoriaUpdate
+from ..schemas.pagina import Pagina
 
 
-def listar_categorias(db: Session, skip: int, limit: int) -> list[Categoria]:
-    """Lista las categorías con paginación."""
-    query = select(Categoria).order_by(Categoria.id.asc()).offset(skip).limit(limit)
-    return list(db.scalars(query).all())
+def listar_categorias(db: Session, skip: int, limit: int) -> Pagina[CategoriaResponse]:
+    """Lista las categorías con paginación y total."""
+    query = select(Categoria)
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    items = list(db.scalars(query.order_by(Categoria.id.asc()).offset(skip).limit(limit)).all())
+    return Pagina[CategoriaResponse](
+        items=[CategoriaResponse.model_validate(c) for c in items],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
 def obtener_categoria_por_id(db: Session, categoria_id: int) -> Categoria:

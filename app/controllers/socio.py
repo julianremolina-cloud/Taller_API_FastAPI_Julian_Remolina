@@ -1,10 +1,16 @@
+from decimal import Decimal
 from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
+
 from ..core.exceptions import Conflicto, NoEncontrado
 from ..models.prestamo import Prestamo
 from ..models.socio import Socio
-from ..schemas.socio import SocioCreate, SocioUpdate
+from ..models.usuario import Usuario
+from ..schemas.pagina import Pagina
+from ..schemas.prestamo import PrestamoResponse
+from ..schemas.socio import SocioCreate, SocioResponse, SocioUpdate
+from ..schemas.usuario import SocioActualizarPropio
 
 
 def listar_socios(
@@ -12,13 +18,21 @@ def listar_socios(
     skip: int,
     limit: int,
     activo: Optional[bool] = None,
-) -> list[Socio]:
+) -> Pagina[SocioResponse]:
     """Lista socios con paginación y filtro opcional por estado activo."""
     query = select(Socio)
     if activo is not None:
         query = query.where(Socio.activo.is_(activo))
-    query = query.order_by(Socio.id.asc()).offset(skip).limit(limit)
-    return list(db.scalars(query).all())
+
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    items = list(db.scalars(query.order_by(Socio.id.asc()).offset(skip).limit(limit)).all())
+
+    return Pagina[SocioResponse](
+        items=[SocioResponse.model_validate(s) for s in items],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
 def obtener_socio_por_id(db: Session, socio_id: int) -> Socio:
@@ -49,23 +63,31 @@ def crear_socio(db: Session, socio_in: SocioCreate) -> Socio:
     return socio
 
 
-def actualizar_socio(db: Session, socio_id: int, socio_in: SocioUpdate) -> Socio:
-    """Actualiza los datos de un socio verificando unicidad de email."""
+def actualizar_socio(
+    db: Session,
+    socio_id: int,
+    socio_in: SocioUpdate,
+) -> Socio:
+    """Actualiza parcialmente un socio verificando unicidad del email."""
     socio = obtener_socio_por_id(db, socio_id)
-    datos = socio_in.model_dump(exclude_unset=True)
 
-    if "email" in datos and datos["email"]:
+    if socio_in.email is not None and socio_in.email != socio.email:
         existente = db.scalar(
             select(Socio).where(
-                func.lower(Socio.email) == func.lower(datos["email"]),
+                func.lower(Socio.email) == func.lower(socio_in.email),
                 Socio.id != socio_id,
             )
         )
         if existente:
-            raise Conflicto(f"El email '{datos['email']}' ya está registrado por otro socio")
+            raise Conflicto(f"El email '{socio_in.email}' ya está registrado por otro socio")
+        socio.email = socio_in.email
 
-    for campo, valor in datos.items():
-        setattr(socio, campo, valor)
+    if socio_in.nombre is not None:
+        socio.nombre = socio_in.nombre
+    if socio_in.telefono is not None:
+        socio.telefono = socio_in.telefono
+    if socio_in.activo is not None:
+        socio.activo = socio_in.activo
 
     db.commit()
     db.refresh(socio)
@@ -73,67 +95,66 @@ def actualizar_socio(db: Session, socio_id: int, socio_in: SocioUpdate) -> Socio
 
 
 def eliminar_socio(db: Session, socio_id: int) -> None:
-    """
-    Elimina un socio según las reglas:
-    - 409 si tiene préstamos sin devolver.
-    - Si solo tiene préstamos devueltos, se desactiva (borrado lógico).
-    - Si no tiene préstamos, se elimina físicamente.
-    """
+    """Elimina un socio si no tiene préstamos activos."""
     socio = obtener_socio_por_id(db, socio_id)
 
-    prestamos_sin_devolver = db.scalar(
+    prestamos_activos = db.scalar(
         select(func.count(Prestamo.id)).where(
             Prestamo.socio_id == socio_id,
             Prestamo.fecha_devolucion.is_(None),
         )
     ) or 0
-    if prestamos_sin_devolver > 0:
-        raise Conflicto(
-            f"No se puede eliminar el socio porque tiene {prestamos_sin_devolver} préstamos sin devolver"
-        )
+    if prestamos_activos > 0:
+        raise Conflicto(f"No se puede eliminar el socio porque tiene {prestamos_activos} préstamo(s) activo(s)")
 
-    total_prestamos = db.scalar(
-        select(func.count(Prestamo.id)).where(Prestamo.socio_id == socio_id)
-    ) or 0
-
-    if total_prestamos > 0:
-        # Borrado lógico: desactivar
-        socio.activo = False
-        db.commit()
-    else:
-        # Borrado físico
-        db.delete(socio)
-        db.commit()
+    db.delete(socio)
+    db.commit()
 
 
-def listar_prestamos_socio(
+def obtener_perfil_socio(db: Session, usuario: Usuario) -> Socio:
+    """Retorna el registro de Socio vinculado al usuario."""
+    if not usuario.socio_id:
+        raise NoEncontrado("El usuario no tiene una ficha de socio vinculada")
+    return obtener_socio_por_id(db, usuario.socio_id)
+
+
+def actualizar_perfil_socio(
     db: Session,
-    socio_id: int,
-    estado: Optional[str] = None,
-) -> list[Prestamo]:
-    """Lista el historial de préstamos de un socio con filtro opcional por estado."""
-    obtener_socio_por_id(db, socio_id)
+    usuario: Usuario,
+    datos: SocioActualizarPropio,
+) -> Socio:
+    """Actualiza únicamente nombre y teléfono del socio autenticado (Z4)."""
+    socio = obtener_perfil_socio(db, usuario)
+
+    if datos.nombre is not None:
+        socio.nombre = datos.nombre
+        usuario.nombre = datos.nombre
+    if datos.telefono is not None:
+        socio.telefono = datos.telefono
+
+    db.commit()
+    db.refresh(socio)
+    return socio
+
+
+def obtener_multas_propias(db: Session, usuario: Usuario) -> dict:
+    """Consulta las multas pendientes y calcula el total adeudado."""
+    if not usuario.socio_id:
+        raise NoEncontrado("El usuario no tiene una ficha de socio vinculada")
 
     consulta = (
         select(Prestamo)
-        .options(selectinload(Prestamo.libro), selectinload(Prestamo.socio))
-        .where(Prestamo.socio_id == socio_id)
+        .where(
+            Prestamo.socio_id == usuario.socio_id,
+            Prestamo.multa > 0,
+            Prestamo.multa_pagada.is_(False),
+        )
+        .order_by(Prestamo.id.desc())
     )
+    prestamos = list(db.scalars(consulta).all())
+    total_adeudado = sum((p.multa for p in prestamos), Decimal("0.00"))
 
-    if estado:
-        estado_normalizado = estado.strip().lower()
-        if estado_normalizado == "activo":
-            consulta = consulta.where(
-                Prestamo.fecha_devolucion.is_(None),
-                Prestamo.fecha_limite >= func.current_date(),
-            )
-        elif estado_normalizado == "vencido":
-            consulta = consulta.where(
-                Prestamo.fecha_devolucion.is_(None),
-                Prestamo.fecha_limite < func.current_date(),
-            )
-        elif estado_normalizado == "devuelto":
-            consulta = consulta.where(Prestamo.fecha_devolucion.is_not(None))
-
-    consulta = consulta.order_by(Prestamo.id.desc())
-    return list(db.scalars(consulta).all())
+    return {
+        "items": [PrestamoResponse.model_validate(p) for p in prestamos],
+        "total_adeudado": total_adeudado,
+    }

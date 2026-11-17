@@ -32,6 +32,8 @@ class PrestamoResponse(BaseModel):
     fecha_limite: date
     fecha_devolucion: Optional[date] = None
     multa: Decimal = Decimal("0.00")
+    multa_pagada: bool = False
+    registrado_por_id: Optional[int] = None
     estado: str
 
     model_config = ConfigDict(from_attributes=True)

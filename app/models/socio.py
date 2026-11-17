@@ -14,3 +14,4 @@ class Socio(Base):
     fecha_alta = Column(DateTime, server_default=func.now(), nullable=False)
 
     prestamos = relationship("Prestamo", back_populates="socio")
+    usuario = relationship("Usuario", back_populates="socio", uselist=False)
