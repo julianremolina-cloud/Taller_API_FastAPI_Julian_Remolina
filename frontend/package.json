@@ -1,0 +1,15 @@
+{
+  "name": "biblioteca-frontend-cloudinary",
+  "version": "1.0.0",
+  "description": "Frontend moderno para sistema de biblioteca con integración de Cloudinary",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "serve": "node server.js",
+    "vite": "vite --port 5173",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

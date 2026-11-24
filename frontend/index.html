@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Biblioteca Digital & Catálogo | Conexión Cloudinary</title>
+  
+  <!-- Tipografías elegantes de biblioteca -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+  
+  <!-- Iconos Lucide / Feather -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  
+  <!-- Cloudinary Upload Widget oficial -->
+  <script src="https://upload-widget.cloudinary.com/global/all.js" type="text/javascript"></script>
+
+  <!-- Estilos principales -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ==============================================
+       BARRA SUPERIOR INFORMATIVA Y ESTADO
+       ============================================== -->
+  <aside class="top-bar">
+    <div class="top-bar-inner">
+      <div class="top-bar-notice">
+        <span class="badge-gold"><i class="bi bi-clock-history"></i> Horario: 8:00 AM - 7:00 PM</span>
+        <span class="notice-text">Préstamos de hasta 14 días • Tasa mora: $0.50/día • Máximo 3 préstamos activos</span>
+      </div>
+
+      <div class="top-bar-actions">
+        <!-- Indicador de conexión FastAPI / Local -->
+        <div id="backend-status-badge" class="status-indicator-pill" title="Haga clic para comprobar conexión">
+          <span class="indicator-dot"></span>
+          <span class="indicator-label">Verificando API...</span>
+          <button id="btn-recheck-health" class="btn-icon-tiny" title="Comprobar servidor"><i class="bi bi-arrow-repeat"></i></button>
+        </div>
+
+        <!-- Selector rápido de rol (para pruebas de evaluación) -->
+        <div class="role-selector-wrap">
+          <label for="select-active-role"><i class="bi bi-person-badge"></i> Rol Activo:</label>
+          <select id="select-active-role" class="select-role-compact">
+            <option value="visitante">Visitante (Lector)</option>
+            <option value="socio">Socio (Ana Torres)</option>
+            <option value="bibliotecario">Bibliotecario</option>
+            <option value="admin" selected>Administrador</option>
+          </select>
+        </div>
+
+        <!-- Ajustes Cloudinary -->
+        <button id="btn-open-cloudinary-settings" class="btn-topbar" title="Configurar Cloudinary">
+          <i class="bi bi-cloud-arrow-up-fill text-cloudinary"></i>
+          <span>Cloudinary</span>
+          <span id="cloudinary-status-dot" class="dot-active"></span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ==============================================
+       CABECERA Y NAVEGACIÓN PRINCIPAL
+       ============================================== -->
+  <header class="main-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-crest">
+          <i class="bi bi-book-half"></i>
+        </div>
+        <div class="brand-text">
+          <h1>BIBLIOTECA DIGITAL</h1>
+          <p class="brand-sub">Sistema de Circulación & Catálogo Multimedia con Cloudinary</p>
+        </div>
+      </div>
+
+      <!-- Navegación por pestañas -->
+      <nav class="main-nav">
+        <button class="nav-btn active" data-tab="catalogo">
+          <i class="bi bi-journals"></i> <span>Catálogo</span>
+        </button>
+        <button class="nav-btn" data-tab="prestamos">
+          <i class="bi bi-arrow-left-right"></i> <span>Préstamos</span>
+          <span id="badge-prestamos-count" class="nav-counter">2</span>
+        </button>
+        <button class="nav-btn" data-tab="carnet">
+          <i class="bi bi-person-vcard"></i> <span>Mi Carnet</span>
+        </button>
+        <button class="nav-btn" data-tab="cloudinary">
+          <i class="bi bi-cloud-check-fill text-cloudinary"></i> <span>Estudio Cloudinary</span>
+        </button>
+        <button class="nav-btn" data-tab="admin">
+          <i class="bi bi-gear-fill"></i> <span>Gestión</span>
+        </button>
+        <button class="nav-btn" data-tab="reportes">
+          <i class="bi bi-bar-chart-line"></i> <span>Reportes</span>
+        </button>
+      </nav>
+
+      <!-- Botón de sesión / Perfil -->
+      <div class="header-user">
+        <div id="user-badge" class="user-profile-chip">
+          <img id="user-avatar" src="https://res.cloudinary.com/demo/image/upload/c_thumb,g_face,w_80,h_80,r_max/rachel.jpg" alt="Usuario" class="user-avatar">
+          <div class="user-info">
+            <span id="user-name" class="user-name">Administrador</span>
+            <span id="user-role-label" class="user-role badge-admin">ADMIN</span>
+          </div>
+          <button id="btn-login-logout" class="btn-ghost-sm" title="Cambiar sesión">
+            <i class="bi bi-box-arrow-right"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==============================================
+       HERO / BUSCADOR PRINCIPAL DE BIBLIOTECA
+       ============================================== -->
+  <section class="library-hero">
+    <div class="hero-content">
+      <div class="hero-headline">
+        <span class="hero-tag">🏛️ ACERVO BIBLIOGRÁFICO NACIONAL</span>
+        <h2>Descubre, Lee y Gestiona la Sabiduría Universal</h2>
+        <p>Explora miles de volúmenes con portadas optimizadas en alta definición mediante la CDN de Cloudinary.</p>
+      </div>
+
+      <!-- Barra de Búsqueda Omnibox -->
+      <div class="hero-search-box">
+        <div class="search-input-group">
+          <i class="bi bi-search search-icon"></i>
+          <input type="text" id="search-input" placeholder="Buscar por título, autor, tema o ISBN (ej. Cien Años, Gabriel, 978030...)" autocomplete="off">
+          <button id="btn-clear-search" class="btn-clear-input" style="display: none;"><i class="bi bi-x-circle-fill"></i></button>
+          <button id="btn-do-search" class="btn-primary search-btn">
+            <span>Buscar</span>
+            <i class="bi bi-arrow-right"></i>
+          </button>
+        </div>
+
+        <!-- Filtros rápidos por Categorías -->
+        <div class="category-pills" id="category-pills">
+          <button class="cat-pill active" data-cat="">Todas las Categorías</button>
+          <button class="cat-pill" data-cat="1">Novela</button>
+          <button class="cat-pill" data-cat="2">Realismo Mágico</button>
+          <button class="cat-pill" data-cat="3">Distopía</button>
+          <button class="cat-pill" data-cat="4">Poesía</button>
+        </div>
+      </div>
+
+      <!-- Estadísticas rápidas en vivo -->
+      <div class="hero-stats">
+        <div class="stat-card">
+          <div class="stat-icon"><i class="bi bi-book"></i></div>
+          <div class="stat-data">
+            <span id="stat-total-libros" class="stat-number">4</span>
+            <span class="stat-title">Títulos Registrados</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon text-success"><i class="bi bi-bookmark-check"></i></div>
+          <div class="stat-data">
+            <span id="stat-disponibles" class="stat-number">6</span>
+            <span class="stat-title">Ejemplares Disponibles</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon text-primary"><i class="bi bi-arrow-repeat"></i></div>
+          <div class="stat-data">
+            <span id="stat-prestamos-activos" class="stat-number">2</span>
+            <span class="stat-title">Préstamos Activos</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon text-warning"><i class="bi bi-people"></i></div>
+          <div class="stat-data">
+            <span id="stat-socios" class="stat-number">3</span>
+            <span class="stat-title">Socios Afiliados</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==============================================
+       CONTENIDO PRINCIPAL POR PESTAÑAS
+       ============================================== -->
+  <main class="main-content container">
+
+    <!-- --------------------------------------------
+         PESTAÑA 1: CATÁLOGO DE LIBROS
+         -------------------------------------------- -->
+    <section id="view-catalogo" class="view-panel active">
+      <!-- Barra de herramientas del catálogo -->
+      <div class="catalog-toolbar">
+        <div class="toolbar-left">
+          <h3 class="section-title">
+            <i class="bi bi-collection"></i> Catálogo de Libros
+            <span id="catalog-count-badge" class="count-badge">4 libros</span>
+          </h3>
+        </div>
+
+        <div class="toolbar-right">
+          <!-- Filtro de orden -->
+          <div class="filter-group">
+            <label for="select-sort"><i class="bi bi-sort-alpha-down"></i> Ordenar:</label>
+            <select id="select-sort" class="form-select-sm">
+              <option value="">Por Defecto</option>
+              <option value="titulo">Título (A-Z)</option>
+              <option value="anio">Año (Más antiguo)</option>
+              <option value="-anio">Año (Más reciente)</option>
+            </select>
+          </div>
+
+          <!-- Filtro de autor -->
+          <div class="filter-group">
+            <label for="select-filter-autor"><i class="bi bi-person"></i> Autor:</label>
+            <select id="select-filter-autor" class="form-select-sm">
+              <option value="">Todos los autores</option>
+            </select>
+          </div>
+
+          <!-- Solo disponibles -->
+          <label class="checkbox-pill">
+            <input type="checkbox" id="check-solo-disponibles">
+            <span>Solo disponibles</span>
+          </label>
+
+          <!-- Filtro de Efecto Cloudinary en vivo -->
+          <div class="filter-group">
+            <label for="select-cloudinary-effect"><i class="bi bi-magic text-cloudinary"></i> Portadas:</label>
+            <select id="select-cloudinary-effect" class="form-select-sm">
+              <option value="coverCard">Cloudinary Estándar (HD)</option>
+              <option value="vintageSepia">Sepia Vintage (Biblioteca)</option>
+              <option value="artisticVignette">Viñeta Artística</option>
+              <option value="monochrome">Blanco y Negro Clásico</option>
+              <option value="improved">Auto-Mejora (AI Enhance)</option>
+            </select>
+          </div>
+
+          <!-- Alternar vistas -->
+          <div class="view-mode-toggle">
+            <button id="btn-view-cards" class="view-toggle-btn active" title="Vista Cuadrícula">
+              <i class="bi bi-grid-3x3-gap-fill"></i>
+            </button>
+            <button id="btn-view-shelf" class="view-toggle-btn" title="Vista Estantería 3D">
+              <i class="bi bi-bookshelf"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cuadrícula de Libros -->
+      <div id="books-grid" class="books-grid">
+        <!-- Renderizado dinámico desde app.js -->
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <p>Cargando catálogo bibliográfico...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------
+         PESTAÑA 2: PRÉSTAMOS & CIRCULACIÓN
+         -------------------------------------------- -->
+    <section id="view-prestamos" class="view-panel">
+      <div class="panel-header-action">
+        <div>
+          <h3 class="section-title"><i class="bi bi-arrow-left-right"></i> Control de Circulación & Préstamos</h3>
+          <p class="section-subtitle">Gestione préstamos activos, fechas límites, devoluciones y liquidación de mora ($0.50/día).</p>
+        </div>
+        <button id="btn-open-nuevo-prestamo" class="btn-primary">
+          <i class="bi bi-plus-circle"></i> Nuevo Préstamo
+        </button>
+      </div>
+
+      <!-- Filtros de préstamos -->
+      <div class="prestamos-filters">
+        <div class="filter-tabs">
+          <button class="prestamo-filter-btn active" data-filter="todos">Todos (<span id="count-prestamos-todos">0</span>)</button>
+          <button class="prestamo-filter-btn" data-filter="activos">Activos / En Curso (<span id="count-prestamos-activos">0</span>)</button>
+          <button class="prestamo-filter-btn" data-filter="vencidos">Vencidos / Con Mora (<span id="count-prestamos-vencidos">0</span>)</button>
+          <button class="prestamo-filter-btn" data-filter="devueltos">Devueltos (<span id="count-prestamos-devueltos">0</span>)</button>
+        </div>
+      </div>
+
+      <!-- Tabla de préstamos -->
+      <div class="table-responsive library-table-wrap">
+        <table class="library-table" id="table-prestamos">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Libro</th>
+              <th>Socio Lector</th>
+              <th>Fecha Préstamo</th>
+              <th>Fecha Límite</th>
+              <th>Estado</th>
+              <th>Retraso / Multa</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="prestamos-tbody">
+            <!-- Renderizado dinámico -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------
+         PESTAÑA 3: CARNET DIGITAL DE SOCIO
+         -------------------------------------------- -->
+    <section id="view-carnet" class="view-panel">
+      <div class="panel-header-action">
+        <div>
+          <h3 class="section-title"><i class="bi bi-person-vcard"></i> Carnet Digital de Afiliación</h3>
+          <p class="section-subtitle">Credencial digital para consulta de estado de cuenta, préstamos en curso y multas.</p>
+        </div>
+
+        <div class="socio-picker-wrap">
+          <label for="select-socio-carnet">Seleccionar Socio:</label>
+          <select id="select-socio-carnet" class="form-select">
+            <!-- Opciones dinámicas -->
+          </select>
+        </div>
+      </div>
+
+      <div class="carnet-layout">
+        <!-- Tarjeta física simulada del carnet -->
+        <div class="carnet-card-wrapper">
+          <div class="library-card" id="digital-library-card">
+            <div class="card-top-strip">
+              <span class="card-org">SISTEMA NACIONAL DE BIBLIOTECAS</span>
+              <span class="card-year">2026</span>
+            </div>
+
+            <div class="card-body">
+              <div class="card-photo-box">
+                <img id="carnet-avatar" src="https://res.cloudinary.com/demo/image/upload/c_thumb,g_face,w_200,h_200,r_max/rachel.jpg" alt="Foto Carnet" class="card-photo">
+                <button id="btn-cambiar-foto-socio" class="btn-change-photo" title="Subir foto a Cloudinary">
+                  <i class="bi bi-camera-fill"></i>
+                </button>
+              </div>
+
+              <div class="card-details">
+                <div class="card-seal">
+                  <i class="bi bi-book"></i>
+                </div>
+                <h4 id="carnet-nombre" class="card-member-name">Ana Torres</h4>
+                <p id="carnet-email" class="card-member-email">ana@example.com</p>
+                <div class="card-meta-grid">
+                  <div>
+                    <span class="card-label">ID SOCIO:</span>
+                    <span id="carnet-id" class="card-val">SOC-0001</span>
+                  </div>
+                  <div>
+                    <span class="card-label">ESTADO:</span>
+                    <span id="carnet-estado" class="badge-success">ACTIVO</span>
+                  </div>
+                  <div>
+                    <span class="card-label">PRÉSTAMOS ACTIVOS:</span>
+                    <span id="carnet-prestamos-count" class="card-val">1 / 3 max</span>
+                  </div>
+                  <div>
+                    <span class="card-label">MULTAS:</span>
+                    <span id="carnet-multas-status" class="badge-success">$0.00 (Al día)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card-footer-strip">
+              <div class="barcode-box">
+                <div class="barcode-lines"></div>
+                <span id="carnet-barcode-code">BIB-SOC-9780307474728</span>
+              </div>
+              <div class="qr-placeholder" title="Código QR Digital">
+                <i class="bi bi-qr-code"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Préstamos vigentes del socio seleccionado -->
+        <div class="socio-prestamos-summary">
+          <h4><i class="bi bi-journal-bookmark-fill"></i> Préstamos Vigentes de este Socio</h4>
+          <div id="socio-active-loans-list" class="socio-loans-list">
+            <!-- Dinámico -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------
+         PESTAÑA 4: ESTUDIO Y GESTOR CLOUDINARY
+         -------------------------------------------- -->
+    <section id="view-cloudinary" class="view-panel">
+      <div class="panel-header-action">
+        <div>
+          <h3 class="section-title"><i class="bi bi-cloud-arrow-up-fill text-cloudinary"></i> Estudio Multimedia Cloudinary</h3>
+          <p class="section-subtitle">Gestión centralizada de imágenes en la nube, subidas de portadas y transformaciones en tiempo real.</p>
+        </div>
+      </div>
+
+      <div class="cloudinary-studio-grid">
+        <!-- Panel 1: Subida de Archivos -->
+        <div class="glass-card">
+          <div class="card-header">
+            <h4><i class="bi bi-upload"></i> Subir Portada a Cloudinary</h4>
+          </div>
+          <div class="card-body">
+            <!-- Zona de arrastre / drag and drop -->
+            <div class="drop-zone" id="cloudinary-drop-zone">
+              <i class="bi bi-cloud-arrow-up drop-icon text-cloudinary"></i>
+              <p class="drop-title">Arrastra y suelta la portada de un libro aquí</p>
+              <p class="drop-subtitle">o haz clic para explorar tus archivos (JPG, PNG, WEBP)</p>
+              <input type="file" id="input-cloudinary-file" accept="image/*" style="display: none;">
+              <div class="drop-buttons">
+                <button type="button" class="btn-primary" id="btn-browse-file">
+                  <i class="bi bi-folder2-open"></i> Elegir Archivo
+                </button>
+                <button type="button" class="btn-secondary" id="btn-open-widget-direct">
+                  <i class="bi bi-window-stack"></i> Abrir Cloudinary Widget
+                </button>
+              </div>
+            </div>
+
+            <!-- Barra de progreso -->
+            <div id="upload-progress-container" class="progress-wrap" style="display: none;">
+              <div class="progress-header">
+                <span id="upload-status-text">Subiendo a Cloudinary...</span>
+                <span id="upload-percentage">0%</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div id="upload-progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- Asignación al catálogo -->
+            <div class="assign-book-box mt-3">
+              <label for="select-assign-book">Asignar esta portada al libro:</label>
+              <div class="input-with-button">
+                <select id="select-assign-book" class="form-select">
+                  <option value="">-- Seleccionar libro del catálogo --</option>
+                </select>
+                <button id="btn-save-cover-assignment" class="btn-success" disabled>
+                  <i class="bi bi-check-lg"></i> Asignar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 2: Vista previa y Transformaciones en Vivo -->
+        <div class="glass-card">
+          <div class="card-header">
+            <h4><i class="bi bi-sliders"></i> Playground de Transformaciones CDN</h4>
+          </div>
+          <div class="card-body">
+            <div class="transform-playground">
+              <div class="transform-preview-box">
+                <img id="playground-preview-img" src="https://res.cloudinary.com/demo/image/upload/c_fill,w_300,h_450,q_auto,f_auto/sample.jpg" alt="Preview Cloudinary" class="preview-cover">
+                <div id="preview-badge-format" class="preview-badge">f_auto, q_auto</div>
+              </div>
+
+              <div class="transform-controls">
+                <div class="form-group">
+                  <label><i class="bi bi-magic"></i> Filtros de Estilo:</label>
+                  <div class="transform-buttons-grid">
+                    <button class="btn-transform-chip active" data-transform="coverStandard">Estándar HD</button>
+                    <button class="btn-transform-chip" data-transform="vintageSepia">Sepia Siglo XIX</button>
+                    <button class="btn-transform-chip" data-transform="artisticVignette">Viñeta Biblioteca</button>
+                    <button class="btn-transform-chip" data-transform="monochrome">Escala de Grises</button>
+                    <button class="btn-transform-chip" data-transform="improved">AI Auto-Enhance</button>
+                  </div>
+                </div>
+
+                <div class="form-group mt-2">
+                  <label>URL Generada por Cloudinary:</label>
+                  <div class="code-url-box">
+                    <code id="generated-cloudinary-url">https://res.cloudinary.com/demo/image/upload/...</code>
+                    <button id="btn-copy-url" class="btn-icon-tiny" title="Copiar URL"><i class="bi bi-clipboard"></i></button>
+                  </div>
+                </div>
+
+                <div class="alert-info-box mt-2">
+                  <i class="bi bi-info-circle-fill"></i>
+                  <span>Cloudinary transforma, optimiza y sirve las imágenes automáticamente en formato moderno (AVIF / WebP) sin sobrecargar el servidor.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------
+         PESTAÑA 5: PANEL DE ADMINISTRACIÓN Y GESTIÓN
+         -------------------------------------------- -->
+    <section id="view-admin" class="view-panel">
+      <div class="panel-header-action">
+        <div>
+          <h3 class="section-title"><i class="bi bi-gear-wide-connected"></i> Panel de Administración del Sistema</h3>
+          <p class="section-subtitle">Registro de nuevos libros, autores, categorías y control de colección bibliográfica.</p>
+        </div>
+      </div>
+
+      <div class="admin-grid">
+        <!-- Formulario: Registrar Nuevo Libro -->
+        <div class="glass-card">
+          <div class="card-header">
+            <h4><i class="bi bi-plus-square"></i> Registrar Nuevo Libro</h4>
+          </div>
+          <div class="card-body">
+            <form id="form-nuevo-libro">
+              <div class="form-group">
+                <label for="libro-titulo">Título del Libro <span class="req">*</span>:</label>
+                <input type="text" id="libro-titulo" class="form-control" placeholder="Ej: Rayuela" required>
+              </div>
+
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label for="libro-isbn">ISBN (13 dígitos) <span class="req">*</span>:</label>
+                  <input type="text" id="libro-isbn" class="form-control" placeholder="9780307474728" pattern="\d{13}" title="Debe contener exactamente 13 dígitos numéricos" required>
+                </div>
+                <div class="form-group">
+                  <label for="libro-anio">Año de Publicación <span class="req">*</span>:</label>
+                  <input type="number" id="libro-anio" class="form-control" min="1450" max="2026" value="2020" required>
+                </div>
+              </div>
+
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label for="libro-ejemplares">Número de Ejemplares (1 a 50) <span class="req">*</span>:</label>
+                  <input type="number" id="libro-ejemplares" class="form-control" min="1" max="50" value="3" required>
+                </div>
+                <div class="form-group">
+                  <label for="libro-autor">Autor <span class="req">*</span>:</label>
+                  <select id="libro-autor" class="form-select" required>
+                    <option value="">Seleccione un autor</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Categorías (Seleccione de 1 a 5) <span class="req">*</span>:</label>
+                <div id="categorias-checkboxes" class="checkbox-group">
+                  <!-- Checkboxes dinámicos -->
+                </div>
+              </div>
+
+              <!-- Portada Cloudinary opcional al crear -->
+              <div class="form-group">
+                <label><i class="bi bi-image text-cloudinary"></i> Portada en Cloudinary (URL o Subir):</label>
+                <div class="input-with-button">
+                  <input type="url" id="libro-portada-url" class="form-control" placeholder="https://res.cloudinary.com/...">
+                  <button type="button" id="btn-upload-cover-form" class="btn-secondary">
+                    <i class="bi bi-cloud-arrow-up"></i> Subir
+                  </button>
+                </div>
+              </div>
+
+              <button type="submit" class="btn-primary w-100 mt-2">
+                <i class="bi bi-save"></i> Guardar Libro en Catálogo
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Formulario: Nuevo Autor y Nueva Categoría -->
+        <div class="admin-side-forms">
+          <!-- Crear Autor -->
+          <div class="glass-card mb-3">
+            <div class="card-header">
+              <h4><i class="bi bi-person-plus"></i> Registrar Autor</h4>
+            </div>
+            <div class="card-body">
+              <form id="form-nuevo-autor">
+                <div class="form-group">
+                  <label for="autor-nombre">Nombre Completo <span class="req">*</span>:</label>
+                  <input type="text" id="autor-nombre" class="form-control" placeholder="Ej: Mario Vargas Llosa" required>
+                </div>
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label for="autor-nacionalidad">Nacionalidad:</label>
+                    <input type="text" id="autor-nacionalidad" class="form-control" placeholder="Peruana" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="autor-nacimiento">Año Nacimiento:</label>
+                    <input type="number" id="autor-nacimiento" class="form-control" min="1000" max="2026" value="1936" required>
+                  </div>
+                </div>
+                <button type="submit" class="btn-secondary w-100 mt-1">
+                  <i class="bi bi-plus-circle"></i> Agregar Autor
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Crear Categoría -->
+          <div class="glass-card mb-3">
+            <div class="card-header">
+              <h4><i class="bi bi-tag"></i> Registrar Categoría</h4>
+            </div>
+            <div class="card-body">
+              <form id="form-nueva-categoria">
+                <div class="form-group">
+                  <label for="cat-nombre">Nombre de la Categoría <span class="req">*</span>:</label>
+                  <input type="text" id="cat-nombre" class="form-control" placeholder="Ej: ciencia ficción" required>
+                </div>
+                <div class="form-group">
+                  <label for="cat-desc">Descripción:</label>
+                  <input type="text" id="cat-desc" class="form-control" placeholder="Narrativas sobre futuros posibles...">
+                </div>
+                <button type="submit" class="btn-secondary w-100 mt-1">
+                  <i class="bi bi-plus-circle"></i> Agregar Categoría
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Mantenimiento de Datos -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h4><i class="bi bi-database-check"></i> Semilla de Datos</h4>
+            </div>
+            <div class="card-body">
+              <p class="text-muted-sm">Restaura la colección inicial del taller con los 4 libros, autores y préstamos iniciales.</p>
+              <button id="btn-reset-db" class="btn-outline-danger w-100">
+                <i class="bi bi-arrow-clockwise"></i> Restaurar Datos de Prueba (Seed)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------
+         PESTAÑA 6: REPORTES DE BIBLIOTECA
+         -------------------------------------------- -->
+    <section id="view-reportes" class="view-panel">
+      <div class="panel-header-action">
+        <div>
+          <h3 class="section-title"><i class="bi bi-graph-up-arrow"></i> Reportes y Métricas Bibliotecarias</h3>
+          <p class="section-subtitle">Estadísticas de uso del catálogo, títulos con mayor demanda y estado general de la biblioteca.</p>
+        </div>
+        <button id="btn-refresh-reportes" class="btn-secondary">
+          <i class="bi bi-arrow-clockwise"></i> Actualizar Reportes
+        </button>
+      </div>
+
+      <div class="reportes-grid">
+        <div class="glass-card">
+          <div class="card-header">
+            <h4><i class="bi bi-trophy"></i> Libros Más Prestados</h4>
+          </div>
+          <div class="card-body">
+            <div id="reporte-mas-prestados" class="reporte-list">
+              <!-- Dinámico -->
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-header">
+            <h4><i class="bi bi-shield-exclamation"></i> Resumen de Auditoría y Reglas</h4>
+          </div>
+          <div class="card-body">
+            <ul class="rules-summary-list">
+              <li><i class="bi bi-check-circle-fill text-success"></i> <strong>R1 & R2:</strong> Integridad referencial de Socio y Libro garantizada.</li>
+              <li><i class="bi bi-check-circle-fill text-success"></i> <strong>R4:</strong> Bloqueo automático ante préstamos vencidos.</li>
+              <li><i class="bi bi-check-circle-fill text-success"></i> <strong>R5:</strong> Límite estricto de máximo 3 libros simultáneos.</li>
+              <li><i class="bi bi-check-circle-fill text-success"></i> <strong>R6:</strong> Prohibición de duplicar el mismo libro en préstamo activo.</li>
+              <li><i class="bi bi-check-circle-fill text-success"></i> <strong>R10:</strong> Liquidación automática de mora a $0.50 por cada día de retraso.</li>
+              <li><i class="bi bi-check-circle-fill text-success"></i> <strong>R11:</strong> Restricción de nuevos préstamos si existen multas pendientes.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==============================================
+       MODALES
+       ============================================== -->
+
+  <!-- Modal 1: Ficha Bibliográfica / Detalle del Libro -->
+  <div id="modal-libro-detalle" class="modal-backdrop">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <button class="modal-close-btn" data-close-modal>&times;</button>
+        <div class="book-detail-grid">
+          <div class="book-detail-cover-col">
+            <div class="book-3d-wrapper">
+              <img id="detail-cover-img" src="" alt="Portada del libro" class="book-detail-cover">
+              <div class="book-spine-effect"></div>
+            </div>
+
+            <!-- Selector de filtro Cloudinary directo -->
+            <div class="detail-cloudinary-toolbar">
+              <span class="label-tiny"><i class="bi bi-magic text-cloudinary"></i> Estilo Cloudinary:</span>
+              <div class="pill-group-mini">
+                <button class="pill-mini active" data-cover-style="coverStandard">HD</button>
+                <button class="pill-mini" data-cover-style="vintageSepia">Sepia</button>
+                <button class="pill-mini" data-cover-style="artisticVignette">Viñeta</button>
+                <button class="pill-mini" data-cover-style="monochrome">B&N</button>
+              </div>
+              <button id="btn-change-book-cover" class="btn-sm-cloudinary mt-2">
+                <i class="bi bi-cloud-arrow-up"></i> Cambiar Portada
+              </button>
+            </div>
+          </div>
+
+          <div class="book-detail-info-col">
+            <div class="detail-category-badges" id="detail-categories"></div>
+            <h2 id="detail-titulo" class="detail-title">Cien Años De Soledad</h2>
+            <p class="detail-author">por <span id="detail-autor">Gabriel García Márquez</span></p>
+
+            <div class="detail-meta-table">
+              <div class="meta-row">
+                <span class="meta-label">ISBN:</span>
+                <span id="detail-isbn" class="meta-value font-mono">9780307474728</span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-label">Año de Publicación:</span>
+                <span id="detail-anio" class="meta-value">1967</span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-label">Ejemplares Totales:</span>
+                <span id="detail-ejemplares" class="meta-value">2</span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-label">Disponibles Ahora:</span>
+                <span id="detail-disponibles" class="meta-value badge-success">2 disponibles</span>
+              </div>
+            </div>
+
+            <div class="detail-synopsis">
+              <h4>Sinopsis y Reseña</h4>
+              <p id="detail-synopsis-text">
+                Obra cumbre de la literatura hispanoamericana. Narra la historia de la familia Buendía a lo largo de siete generaciones en el mítico pueblo de Macondo.
+              </p>
+            </div>
+
+            <div class="detail-actions">
+              <button id="btn-detail-prestar" class="btn-primary btn-lg">
+                <i class="bi bi-journal-plus"></i> Solicitar Préstamo
+              </button>
+              <button class="btn-secondary" data-close-modal>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Registrar Nuevo Préstamo -->
+  <div id="modal-nuevo-prestamo" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3><i class="bi bi-journal-plus"></i> Registrar Préstamo de Libro</h3>
+          <button class="modal-close-btn" data-close-modal>&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="form-crear-prestamo">
+            <div class="form-group">
+              <label for="prestamo-libro">Libro a Prestar <span class="req">*</span>:</label>
+              <select id="prestamo-libro" class="form-select" required>
+                <option value="">Seleccione un libro</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="prestamo-socio">Socio Lector <span class="req">*</span>:</label>
+              <select id="prestamo-socio" class="form-select" required>
+                <option value="">Seleccione un socio</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="prestamo-dias">Días de Préstamo (Máximo 30 días):</label>
+              <input type="number" id="prestamo-dias" class="form-control" value="14" min="1" max="30" required>
+              <small class="form-text">Plazo estándar: 14 días calendario.</small>
+            </div>
+
+            <div class="alert-info-box mt-2">
+              <i class="bi bi-shield-check"></i>
+              <span>El sistema validará automáticamente las reglas R1 a R11 (mora previa, cupo máximo de 3 libros y stock).</span>
+            </div>
+
+            <div class="modal-footer mt-3">
+              <button type="button" class="btn-secondary" data-close-modal>Cancelar</button>
+              <button type="submit" class="btn-primary"><i class="bi bi-check2-circle"></i> Confirmar Préstamo</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Configuración de Cloudinary -->
+  <div id="modal-cloudinary-config" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3><i class="bi bi-cloud-gear text-cloudinary"></i> Ajustes de Cloudinary</h3>
+          <button class="modal-close-btn" data-close-modal>&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-intro">Configure sus credenciales de Cloudinary para subir portadas directamente a su propia cuenta o utilizar el preset predeterminado.</p>
+          
+          <form id="form-cloudinary-config">
+            <div class="form-group">
+              <label for="cfg-cloud-name">Cloud Name <span class="req">*</span>:</label>
+              <input type="text" id="cfg-cloud-name" class="form-control" placeholder="demo" required>
+              <small class="form-text">Nombre de su cuenta en cloudinary.com (por defecto: <code>demo</code>).</small>
+            </div>
+
+            <div class="form-group">
+              <label for="cfg-upload-preset">Upload Preset (Unsigned) <span class="req">*</span>:</label>
+              <input type="text" id="cfg-upload-preset" class="form-control" placeholder="ml_default" required>
+              <small class="form-text">Preset de subida sin firmar creado en los ajustes de Cloudinary.</small>
+            </div>
+
+            <div class="form-group">
+              <label for="cfg-default-filter">Filtro de Portada Predeterminado:</label>
+              <select id="cfg-default-filter" class="form-select">
+                <option value="coverStandard">Estándar HD (c_fill, w_400, h_600)</option>
+                <option value="vintageSepia">Sepia Clásico (e_sepia)</option>
+                <option value="artisticVignette">Viñeta Biblioteca (e_vignette)</option>
+                <option value="monochrome">Blanco y Negro</option>
+                <option value="improved">AI Auto-Enhance (e_improve)</option>
+              </select>
+            </div>
+
+            <div class="modal-footer mt-3">
+              <button type="button" id="btn-test-cloudinary" class="btn-secondary">
+                <i class="bi bi-lightning-charge"></i> Probar Conexión
+              </button>
+              <button type="submit" class="btn-primary">
+                <i class="bi bi-save"></i> Guardar Ajustes
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Iniciar Sesión (OAuth2 Password) -->
+  <div id="modal-auth" class="modal-backdrop">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3><i class="bi bi-key-fill"></i> Iniciar Sesión</h3>
+          <button class="modal-close-btn" data-close-modal>&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="form-auth-login">
+            <div class="form-group">
+              <label for="auth-email">Correo Electrónico:</label>
+              <input type="email" id="auth-email" class="form-control" placeholder="admin@biblioteca.com" required>
+            </div>
+            <div class="form-group">
+              <label for="auth-password">Contraseña:</label>
+              <input type="password" id="auth-password" class="form-control" placeholder="••••••••" required>
+            </div>
+
+            <!-- Accesos rápidos para el evaluador -->
+            <div class="quick-credentials-box">
+              <span class="label-tiny">Cuentas rápidas de prueba:</span>
+              <div class="quick-btns-row">
+                <button type="button" class="btn-quick-cred" data-email="admin@biblioteca.com" data-pass="admin">Admin</button>
+                <button type="button" class="btn-quick-cred" data-email="biblio@biblioteca.com" data-pass="biblio">Bibliotecario</button>
+                <button type="button" class="btn-quick-cred" data-email="ana@example.com" data-pass="socio">Socio (Ana)</button>
+              </div>
+            </div>
+
+            <button type="submit" class="btn-primary w-100 mt-3">
+              <i class="bi bi-box-arrow-in-right"></i> Entrar
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contenedor flotante para Toast Notifications -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- ==============================================
+       PIE DE PÁGINA
+       ============================================== -->
+  <footer class="library-footer">
+    <div class="footer-container">
+      <div class="footer-col">
+        <div class="footer-brand">
+          <i class="bi bi-book-half"></i> Biblioteca Digital ADSO
+        </div>
+        <p>Taller de Desarrollo API REST Segura con FastAPI y Frontend Integrado con Cloudinary CDN.</p>
+        <p class="footer-author">Desarrollado para: <strong>Julian Remolina</strong> • SENA ADSO</p>
+      </div>
+
+      <div class="footer-col">
+        <h5>Módulos del Sistema</h5>
+        <ul>
+          <li><a href="#" data-tab-link="catalogo">Catálogo Bibliográfico</a></li>
+          <li><a href="#" data-tab-link="prestamos">Circulación y Multas ($0.50/día)</a></li>
+          <li><a href="#" data-tab-link="carnet">Carnet Digital de Afiliación</a></li>
+          <li><a href="#" data-tab-link="cloudinary">Estudio de Imágenes Cloudinary</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h5>Tecnologías Integradas</h5>
+        <div class="tech-tags">
+          <span class="tech-tag"><i class="bi bi-lightning-fill text-warning"></i> FastAPI</span>
+          <span class="tech-tag"><i class="bi bi-cloud-check-fill text-cloudinary"></i> Cloudinary</span>
+          <span class="tech-tag"><i class="bi bi-database"></i> PostgreSQL</span>
+          <span class="tech-tag"><i class="bi bi-shield-lock"></i> Argon2 & JWT</span>
+          <span class="tech-tag"><i class="bi bi-box"></i> Docker</span>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 Biblioteca Pública & Digital. Todos los derechos reservados.</p>
+    </div>
+  </footer>
+
+  <!-- Scripts en orden -->
+  <script src="js/config.js"></script>
+  <script src="js/cloudinary.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
